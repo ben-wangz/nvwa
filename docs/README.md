@@ -26,6 +26,19 @@
 
 ## Component Design
 
+1. Components As Plugin
+2. Storage
+3. Artifact Repository
+4. Monitor
+5. CI/CD
+6. Certificate Management
+7. Ingress Management
+8. Software Management
+9. others
+    * Remote Disks
+    * K8S Dashboard
+    * Docs Service
+
 ## Software Interface Design
 
 ## Test Report

@@ -19,7 +19,8 @@ function configure() {
         | while read line || [[ -n $line ]]
     do
         echo "parsing $line"
-        local NAME=$(echo $line | awk -F= '{print $1}' | sed 's/_/./g')
+        local NAME=$( \
+            echo $line | awk -F= '{print $1}' | sed -e "s/___/-/g" -e "s/__/\x01/g" -e "s/_/./g" -e "s/\x01/_/g")
         local VALUE=$(echo $line | awk -F= '{ st = index($0,"=");print substr($0,st+1)}' | sed -e 's/^"//' -e 's/"$//')
         echo "set '$NAME'='$VALUE'"
         add_property $FILE_PATH $NAME "$VALUE"
@@ -46,8 +47,10 @@ case "$NODE_ROLE" in
        exec $HADOOP_HOME/bin/hdfs --config $HADOOP_CONF_DIR namenode $@
    ;;
    "DataNode")
+       exec $HADOOP_HOME/bin/hdfs --config $HADOOP_CONF_DIR datanode $@
    ;;
-   "Secondary NameNode")
+   "SecondaryNameNode")
+       exec $HADOOP_HOME/bin/hdfs --config $HADOOP_CONF_DIR secondarynamenode $@
    ;;
    "ResourceManager")
    ;;

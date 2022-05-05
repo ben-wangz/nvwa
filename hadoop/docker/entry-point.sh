@@ -34,7 +34,6 @@ configure $HADOOP_CONF_DIR/yarn-site.xml YARN_CONF_
 configure $HADOOP_CONF_DIR/httpfs-site.xml HTTPFS_CONF_
 configure $HADOOP_CONF_DIR/kms-site.xml KMS_CONF_
 
-NODE_ROLE="kiwi"
 echo "starting... $NODE_ROLE"
 case "$NODE_ROLE" in
    "NameNodeFormatter")

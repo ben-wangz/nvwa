@@ -19,7 +19,7 @@ RUN set -x \
         && rm -f $HADOOP_TAR_GZ \
         && ln -s /opt/hadoop/hadoop-$HADOOP_VERSION /opt/hadoop/current
 RUN set -x \
-    && dnf -y install java-11-openjdk-devel \
+    && dnf -y install java-11-openjdk-devel
 COPY entry-point.sh /opt/hadoop/entry/namenode/entry-point.sh
 RUN chmod u+x /opt/hadoop/entry/namenode/entry-point.sh
 

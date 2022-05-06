@@ -34,4 +34,5 @@ ext {
     dockerRegistry = systemEnv.getOrDefault("DOCKER_REGISTRY", "docker.io")
     chartMuseum = systemEnv.getOrDefault("CHART_MUSEUM", "http://insecure.chart.museum.local")
     namespace = systemEnv.getOrDefault("NAMESPACE", "nvwa")
+    systemEnvMap = systemEnv
 }

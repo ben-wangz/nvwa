@@ -34,6 +34,7 @@ configure $HADOOP_CONF_DIR/hdfs-site.xml HDFS_CONF_
 configure $HADOOP_CONF_DIR/yarn-site.xml YARN_CONF_
 configure $HADOOP_CONF_DIR/httpfs-site.xml HTTPFS_CONF_
 configure $HADOOP_CONF_DIR/kms-site.xml KMS_CONF_
+configure $HADOOP_CONF_DIR/mapred-site.xml MAPRED_CONF_
 
 echo "starting... $NODE_ROLE"
 case "$NODE_ROLE" in

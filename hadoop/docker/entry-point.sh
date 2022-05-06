@@ -61,6 +61,7 @@ case "$NODE_ROLE" in
    ;;
    "MapReduceJobHistoryServer")
    ;;
+   *)
+       >&2 echo "NODE_ROLE=$NODE_ROLE not supported"
+   ;;
 esac
-
-

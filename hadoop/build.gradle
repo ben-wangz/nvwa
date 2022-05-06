@@ -17,10 +17,10 @@ Map<String, String> systemEnvMap = project.rootProject.ext.systemEnvMap
 
 task buildImage(type: DockerBuildImage) {
     def dockerBuildDirectory = project.file("docker")
-    inputDir = dockerBuildDirectory
-    dockerFile = project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile")
+    inputDir.set(dockerBuildDirectory)
+    dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
     images.add("hadoop:${project.getVersion()}")
-    remove = true
+    remove.set(true)
     buildArgs.put("HADOOP_DOWNLOAD_BASE_URL",
             systemEnvMap.getOrDefault("HADOOP_DOWNLOAD_BASE_URL", "https://resource.geekcity.tech/hadoop"))
 }

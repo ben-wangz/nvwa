@@ -1,0 +1,39 @@
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+buildscript {
+    repositories {
+        for (mavenRepositoryUrl in project.rootProject.ext.mavenRepositoryUrlList) {
+            maven { url(mavenRepositoryUrl) }
+        }
+    }
+}
+
+plugins {
+    id "com.bmuschko.docker-remote-api" version "7.2.0"
+}
+
+version = project.rootProject.ext.fullVersion
+Map<String, String> systemEnvMap = project.rootProject.ext.systemEnvMap
+
+task buildServerImage(type: DockerBuildImage) {
+    def dockerBuildDirectory = project.file("docker/server")
+    inputDir.set(dockerBuildDirectory)
+    dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
+    images.add("devpi-server:${project.getVersion()}")
+    remove.set(true)
+    buildArgs.put("HADOOP_DOWNLOAD_BASE_URL",
+            systemEnvMap.getOrDefault("HADOOP_DOWNLOAD_BASE_URL", "https://resource.geekcity.tech/hadoop"))
+}
+task buildClientImage(type: DockerBuildImage) {
+    def dockerBuildDirectory = project.file("docker/client")
+    inputDir.set(dockerBuildDirectory)
+    dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
+    images.add("devpi-client:${project.getVersion()}")
+    remove.set(true)
+    buildArgs.put("HADOOP_DOWNLOAD_BASE_URL",
+            systemEnvMap.getOrDefault("HADOOP_DOWNLOAD_BASE_URL", "https://resource.geekcity.tech/hadoop"))
+}
+task buildImage(){
+    dependsOn(buildServerImage)
+    dependsOn(buildClientImage)
+}

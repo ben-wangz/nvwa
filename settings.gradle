@@ -12,5 +12,7 @@ pluginManagement {
 }
 rootProject.name = "nvwa"
 include "docs"
+include "docker"
+include "helm"
 include "hadoop"
 include "devpi"

@@ -1,0 +1,159 @@
+import com.bmuschko.gradle.docker.tasks.image.*
+import com.github.dockerjava.api.exception.NotFoundException
+
+buildscript {
+    repositories {
+        for (mavenRepositoryUrl in project.rootProject.ext.mavenRepositoryUrlList) {
+            maven { url(mavenRepositoryUrl) }
+        }
+    }
+}
+
+plugins {
+    id "com.bmuschko.docker-remote-api" version "7.2.0"
+    id "de.undercouch.download" version "4.1.1"
+}
+
+version = project.rootProject.ext.fullVersion
+ext {
+    loadImageIfNotExists = { String imageIdentify, String imageUrl ->
+        downloadAndLoad(imageIdentify, imageUrl)
+    }
+    loadAndPushImage = {
+        String imageIdentify,
+        String imageUrl,
+        String newRepository,
+        String newTag ->
+            downloadAndLoad(imageIdentify, imageUrl)
+            tagImage(imageIdentify, newRepository, newTag)
+            pushImage("${newRepository}:${newTag}")
+    }
+    releaseImage = {
+        File dockerBuildDirectory,
+        String imageNameWithTag,
+        Map<String, String> buildArguments,
+        boolean push = false ->
+            buildImage(dockerBuildDirectory, imageNameWithTag, buildArguments)
+            if (push) {
+                pushImage(imageNameWithTag)
+            }
+    }
+}
+
+private void tagImage(String imageIdentify, String newRepository, String newTag) {
+    Task imageTagTask = tasks.create("tempImageTag_${randomString(8)}", DockerTagImage) {
+        imageId.set(imageIdentify)
+        repository.set(newRepository)
+        tag.set(newTag)
+        onError(new Action<Throwable>() {
+            @Override
+            void execute(Throwable throwable) {
+                throw new RuntimeException(throwable)
+            }
+        })
+    }
+    imageTagTask.start()
+}
+
+private void buildImage(
+        File dockerBuildDirectory,
+        String imageNameWithTag,
+        Map<String, String> buildArguments) {
+    // maybe a bug for `com.bmuschko.docker-remote-api`
+    project.file("${project.buildDir}/.docker").mkdirs()
+    Task buildImage = tasks.create("buildImage_${randomString(8)}", DockerBuildImage) {
+        inputDir.set(dockerBuildDirectory)
+        dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
+        images.add(imageNameWithTag)
+        remove.set(true)
+        buildArgs.putAll(buildArguments)
+        onError(new Action<Throwable>() {
+            @Override
+            void execute(Throwable throwable) {
+                throw new RuntimeException(throwable)
+            }
+        })
+    }
+    buildImage.start()
+}
+
+private void pushImage(String imageIdentify) {
+    Task pushImage = tasks.create("pushImage_${randomString(8)}", DockerPushImage) {
+        images.add(imageIdentify)
+        onError(new Action<Throwable>() {
+            @Override
+            void execute(Throwable throwable) {
+                throw new RuntimeException(throwable)
+            }
+        })
+    }
+    pushImage.start()
+}
+
+private void downloadImage(String url, File imageFile) {
+    if (imageFile.exists()) {
+        println("skip downloading ${imageFile.getAbsolutePath()} as file exists")
+    } else {
+        download {
+            src url
+            dest imageFile.getAbsolutePath()
+            tempAndMove true
+            overwrite false
+        }
+    }
+}
+
+private void loadImage(File imageFileToLoad) {
+    Task loadImageTask = tasks.create("tempLoadImage_${randomString(8)}", DockerLoadImage) {
+        imageFile.set(imageFileToLoad)
+        onError(new Action<Throwable>() {
+            @Override
+            void execute(Throwable throwable) {
+                throw new RuntimeException(throwable)
+            }
+        })
+    }
+    loadImageTask.start()
+}
+
+private void downloadAndLoad(String imageIdentify, String imageUrl) {
+    if (imageExists(imageIdentify)) {
+        println("skip loading image(${imageIdentify}) as image exists")
+        return
+    }
+    File tempImageFile = File.createTempFile("docker.image.", ".dim")
+    tempImageFile.delete()
+    try {
+        downloadImage(imageUrl, tempImageFile)
+        loadImage(tempImageFile)
+    } finally {
+        if (tempImageFile.exists()) {
+            tempImageFile.delete()
+        }
+    }
+}
+
+private boolean imageExists(String imageIdentify) {
+    Task imageExistsTask = tasks.create("tempImageExists_${randomString(8)}", DockerInspectImage) {
+        imageId.set(imageIdentify)
+        onError(new Action<Throwable>() {
+            @Override
+            void execute(Throwable throwable) {
+                throw throwable
+            }
+        })
+    }
+    try {
+        imageExistsTask.start()
+        return true
+    } catch (NotFoundException ignored) {
+        return false
+    }
+}
+
+private String randomString(int length) {
+    def alphabet = (('A'..'Z') + ('0'..'9') + ('a'..'z')).join()
+    new Random().with {
+        (1..length).collect { alphabet[nextInt(alphabet.length())] }.join()
+    }
+}

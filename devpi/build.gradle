@@ -1,4 +1,4 @@
-import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import groovy.json.JsonBuilder
 
 buildscript {
     repositories {
@@ -9,31 +9,245 @@ buildscript {
 }
 
 plugins {
-    id "com.bmuschko.docker-remote-api" version "7.2.0"
+    id 'org.unbroken-dome.helm' version '1.7.0'
+    id 'org.unbroken-dome.helm-publish' version '1.7.0'
 }
 
 version = project.rootProject.ext.fullVersion
 Map<String, String> systemEnvMap = project.rootProject.ext.systemEnvMap
+String softwareName = project.getName()
+String serverImageName = "${softwareName}-server"
+String clientImageName = "${softwareName}-client"
+String softwareVersion = project.getVersion()
+String dockerRegistry = project.rootProject.ext.dockerRegistry
+String chartMuseumUrl = project.rootProject.ext.chartMuseum
+String namespace = project.rootProject.ext.namespace
+String instanceName = systemEnvMap.getOrDefault("DEVPI_INSTANCE_NAME", "my-devpi")
+String imageBaseUrl = systemEnvMap.getOrDefault(
+        "IMAGE_BASE_URL", "https://resource.geekcity.tech/kubernetes/docker-images/x86_64/all")
+String deleteChartIfExists = systemEnvMap.getOrDefault("DELETE_CHART_IF_EXISTS", "false")
+task releaseServerImage() {
+    doFirst {
+        String imageIdentify = "python:3.9.12-buster"
+        String imageUrl = "${imageBaseUrl}/docker.io_python_3.9.12-buster.dim"
+        String newRepository = "${dockerRegistry}/python"
+        String newTag = "3.9.12-buster"
+        project(":docker").ext.loadAndPushImage(
+                imageIdentify,
+                imageUrl,
+                newRepository,
+                newTag,
+        )
+    }
+    doLast {
+        String imageIdentify = "${dockerRegistry}/${serverImageName}:${project.getVersion()}"
+        File dockerBuildDirectory = project.file("docker/server")
+        Map<String, String> buildArguments = [
+                "BASE_CENTOS_IMAGE": "${dockerRegistry}/python:3.9.12-buster"
+        ]
+        project(":docker").ext.releaseImage(
+                dockerBuildDirectory,
+                imageIdentify,
+                buildArguments,
+                true,
+        )
+    }
+}
+task releaseClientImage() {
+    doFirst {
+        String imageIdentify = "python:3.9.12-buster"
+        String imageUrl = "${imageBaseUrl}/docker.io_python_3.9.12-buster.dim"
+        String newRepository = "${dockerRegistry}/python"
+        String newTag = "3.9.12-buster"
+        project(":docker").ext.loadAndPushImage(
+                imageIdentify,
+                imageUrl,
+                newRepository,
+                newTag,
+        )
+    }
+    doLast {
+        String imageIdentify = "${dockerRegistry}/${clientImageName}:${project.getVersion()}"
+        File dockerBuildDirectory = project.file("docker/client")
+        Map<String, String> buildArguments = [
+                "BASE_CENTOS_IMAGE": "${dockerRegistry}/python:3.9.12-buster"
+        ]
+        project(":docker").ext.releaseImage(
+                dockerBuildDirectory,
+                imageIdentify,
+                buildArguments,
+                true,
+        )
+    }
+}
+task releaseImage() {
+    doLast {
+        File resultMessageFile = extractResultMessageFile(softwareName)
+        resultMessageFile.text = new JsonBuilder([
+                server: [
+                        registry  : dockerRegistry,
+                        repository: serverImageName,
+                        tag       : softwareVersion,
+                ],
+                client: [
+                        registry  : dockerRegistry,
+                        repository: clientImageName,
+                        tag       : softwareVersion,
+                ],
+        ]).toPrettyString()
+    }
+    dependsOn(releaseServerImage)
+    dependsOn(releaseClientImage)
+}
+helm {
+    downloadClient {
+        enabled = true
+        version = '3.6.2'
+    }
+    charts {
+        devpi {
+            chartName = softwareName
+            chartVersion = softwareVersion
+            sourceDir = project.file('helm')
+        }
+    }
+    publishing {
+        repositories {
+            chartMuseum("chart-museum") {
+                url = uri(chartMuseumUrl)
+            }
+        }
+    }
+}
+task deleteChartReleaseIfExists() {
+    doLast {
+        if ("true" != deleteChartIfExists) {
+            return
+        }
+        if (project(":helm").ext.chartExists(chartMuseumUrl, softwareName, softwareVersion)) {
+            println("deleting chart(${chartMuseumUrl}, ${softwareName}, ${softwareVersion})")
+            project(":helm").ext.deleteChart(chartMuseumUrl, softwareName, softwareVersion)
+        }
+    }
+}
+helmPublishDevpiChart.dependsOn(deleteChartReleaseIfExists)
+task releaseHelmChart() {
+    doLast {
+        File resultMessageFile = extractResultMessageFile(softwareName)
+        resultMessageFile.parentFile.mkdirs()
+        resultMessageFile.text = new JsonBuilder([
+                repository     : chartMuseumUrl,
+                chartName      : softwareName,
+                softwareVersion: softwareVersion,
+        ]).toPrettyString()
+    }
+    dependsOn(helmPublishDevpiChart)
+}
+File valuesYamlFile = project.file("${project.buildDir}/runtime/local.values.yaml")
+task renderValuesYaml() {
+    doLast {
+        rootProject.ext.renderFile(
+                project.file("local.values.template.yaml"),
+                [
+                        "imageRepository": "${dockerRegistry}/${serverImageName}",
+                        "imageTag"       : softwareVersion,
+                ],
+                valuesYamlFile,
+        )
+    }
+}
+task installSoftware() {
+    doLast {
+        project(":helm").ext.installInstanceStandard(
+                namespace,
+                instanceName,
+                chartMuseumUrl,
+                softwareName,
+                softwareVersion,
+                valuesYamlFile,
+                300,
+                true,
+        )
+    }
+    dependsOn(releaseImage)
+    dependsOn(releaseHelmChart)
+    dependsOn(renderValuesYaml)
+}
+File toolYamlFile = project.file("${project.buildDir}/runtime/devpi.tool.yaml")
+task renderToolYaml() {
+    doLast {
+        rootProject.ext.renderFile(
+                project.file("tool/devpi.tool.template.yaml"),
+                [
+                        "imageRepository": "${dockerRegistry}/${clientImageName}",
+                        "imageTag"       : softwareVersion,
+                ],
+                toolYamlFile,
+        )
+    }
+}
+task installTool() {
+    doLast {
+        exec {
+            def execSpec = commandLine(
+                    "kubectl", "-n", namespace, "apply", "-f", toolYamlFile,
+            )
+            println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+        }
+    }
+    dependsOn(renderToolYaml)
+}
+File initializeMirrorJobYamlFile = project.file("${project.buildDir}/runtime/devpi.initialize.mirror.job.yaml")
+task renderInitializeMirrorJobYaml() {
+    doLast {
+        rootProject.ext.renderFile(
+                project.file("tool/devpi.initialize.mirror.job.template.yaml"),
+                [
+                        "imageRepository": "${dockerRegistry}/${clientImageName}",
+                        "imageTag"       : softwareVersion,
+                ],
+                initializeMirrorJobYamlFile,
+        )
+    }
+}
+task initializeMirrorJob() {
+    doLast {
+        exec {
+            def execSpec = commandLine(
+                    "kubectl", "-n", namespace, "apply", "-f", initializeMirrorJobYamlFile,
+            )
+            println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+        }
+    }
+    dependsOn(renderInitializeMirrorJobYaml)
+}
+File testPipInstallJobYamlFile = project.file("${project.buildDir}/runtime/test.pip.install.job.yaml")
+task renderTestPipInstallJobYaml() {
+    doLast {
+        rootProject.ext.renderFile(
+                project.file("tool/test.pip.install.job.template.yaml"),
+                [
+                        "pythonImageIdentity": "${dockerRegistry}/python:3.9.12-buster",
+                ],
+                testPipInstallJobYamlFile,
+        )
+    }
+}
+task testPipInstallJob() {
+    doLast {
+        exec {
+            def execSpec = commandLine(
+                    "kubectl", "-n", namespace, "apply", "-f", testPipInstallJobYamlFile,
+            )
+            println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+        }
+    }
+    dependsOn(renderTestPipInstallJobYaml)
+}
 
-task buildServerImage(type: DockerBuildImage) {
-    def dockerBuildDirectory = project.file("docker/server")
-    inputDir.set(dockerBuildDirectory)
-    dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
-    images.add("devpi-server:${project.getVersion()}")
-    remove.set(true)
-    buildArgs.put("HADOOP_DOWNLOAD_BASE_URL",
-            systemEnvMap.getOrDefault("HADOOP_DOWNLOAD_BASE_URL", "https://resource.geekcity.tech/hadoop"))
-}
-task buildClientImage(type: DockerBuildImage) {
-    def dockerBuildDirectory = project.file("docker/client")
-    inputDir.set(dockerBuildDirectory)
-    dockerFile.set(project.file("${dockerBuildDirectory.getAbsolutePath()}/Dockerfile"))
-    images.add("devpi-client:${project.getVersion()}")
-    remove.set(true)
-    buildArgs.put("HADOOP_DOWNLOAD_BASE_URL",
-            systemEnvMap.getOrDefault("HADOOP_DOWNLOAD_BASE_URL", "https://resource.geekcity.tech/hadoop"))
-}
-task buildImage(){
-    dependsOn(buildServerImage)
-    dependsOn(buildClientImage)
+private File extractResultMessageFile(String identifyForDefault) {
+    String resultMessagePathPropertyName = "RESULT_MESSAGE_PATH"
+    return project.hasProperty(resultMessagePathPropertyName)
+            ? project.file(project.property(resultMessagePathPropertyName))
+            : project.file("${project.buildDir}/result_message/${identifyForDefault}")
 }

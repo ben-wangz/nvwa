@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-pip-install
+  labels:
+    app.kubernetes.io/name: test-pip-install
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: test-pip-install
+    spec:
+      restartPolicy: Never
+      hostAliases:
+        - ip: "172.17.0.1"
+          hostnames:
+            - "devpi-server.local"
+      containers:
+        - name: test-pip-install
+          image: ${pythonImageIdentity}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DEVPI_SERVER_HOST
+              value: "devpi-server.local"
+            - name: DEVPI_SERVER_PORT
+              value: "80"
+          command:
+            - pip
+            - install
+            - -i
+            - "http://devpi-server.local:80/root/pypi/+simple"
+            - "simplejson==3.17.6"
+            - "--trusted-host"
+            - "devpi-server.local"

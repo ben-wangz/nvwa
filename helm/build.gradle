@@ -1,0 +1,125 @@
+import groovyx.net.http.FromServer
+import groovyx.net.http.HttpBuilder
+
+buildscript {
+    repositories {
+        for (mavenRepositoryUrl in project.rootProject.ext.mavenRepositoryUrlList) {
+            maven { url(mavenRepositoryUrl) }
+        }
+    }
+}
+plugins {
+    id "io.github.http-builder-ng.http-plugin" version "0.1.1"
+}
+
+version = project.rootProject.ext.fullVersion
+
+String helmBinary = project.rootProject.ext.helmBinary
+ext {
+    installInstanceStandard = {
+        String namespace,
+        String instanceName,
+        String repoUrl,
+        String softwareName,
+        String softwareVersion,
+        File valuesFile,
+        int timeoutSeconds,
+        boolean upgradeIfExists = false ->
+            installInstanceStandard(
+                    helmBinary,
+                    namespace, instanceName,
+                    repoUrl, softwareName, softwareVersion,
+                    valuesFile,
+                    timeoutSeconds,
+                    upgradeIfExists)
+    }
+    chartExists = { String repoUrl, String softwareName, String softwareVersion ->
+        def http = HttpBuilder.configure {
+            request.uri = repoUrl
+        }
+        http.get {
+            request.uri.path = "/api/charts/${softwareName}/${softwareVersion}"
+            response.success { FromServer fromServer, Object body ->
+                return true
+            }
+            response.failure { FromServer fromServer, Object body ->
+                return false
+            }
+        }
+    }
+    deleteChart = { String repoUrl, String softwareName, String softwareVersion ->
+        def http = HttpBuilder.configure {
+            request.uri = repoUrl
+        }
+        http.delete {
+            request.uri.path = "/api/charts/${softwareName}/${softwareVersion}"
+            response.failure { FromServer fromServer, Object body ->
+                throw new RuntimeException(body instanceof String ? body : body.toString())
+            }
+        }
+    }
+}
+
+class NullOutputStream extends OutputStream {
+    @Override
+    void write(int b) throws IOException {
+    }
+}
+
+private boolean instanceInstalled(String helmBinary, String namespace, String instanceName) {
+    def stdout = new NullOutputStream()
+    def stderr = new NullOutputStream()
+    ExecResult statusResult = exec {
+        def execSpec = commandLine(helmBinary, "status", "-n", namespace, instanceName)
+        ignoreExitValue(true)
+        standardOutput(stdout)
+        errorOutput(stderr)
+        println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+    }
+    return 0 == statusResult.exitValue
+}
+
+private boolean installInstanceStandard(
+        String helmBinary,
+        String namespace,
+        String instanceName,
+        String repoUrl,
+        String softwareName,
+        String softwareVersion,
+        File valuesFile,
+        int timeoutSeconds,
+        boolean upgradeIfExists
+) {
+    if (instanceInstalled(helmBinary, namespace, instanceName) && upgradeIfExists) {
+        exec {
+            def execSpec = commandLine(
+                    helmBinary,
+                    "-n", namespace,
+                    "upgrade", instanceName,
+                    softwareName,
+                    "--repo", repoUrl,
+                    "--version", softwareVersion,
+                    "-f", valuesFile,
+                    "--atomic",
+                    "--timeout", "${timeoutSeconds}s",
+            )
+            println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+        }
+    } else {
+        exec {
+            def execSpec = commandLine(
+                    helmBinary,
+                    "-n", namespace,
+                    "install", instanceName,
+                    softwareName,
+                    "--repo", repoUrl,
+                    "--version", softwareVersion,
+                    "-f", valuesFile,
+                    "--create-namespace",
+                    "--atomic",
+                    "--timeout", "${timeoutSeconds}s",
+            )
+            println("running command: ${String.join(" ", execSpec.getCommandLine())}")
+        }
+    }
+}

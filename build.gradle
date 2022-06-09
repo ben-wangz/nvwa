@@ -1,3 +1,5 @@
+import groovy.text.SimpleTemplateEngine
+
 buildscript {
     repositories {
         maven { url("https://maven.aliyun.com/repository/public") }
@@ -31,8 +33,28 @@ ext {
         return systemEnv.get(gitCommitIdKey).trim()
     }
     fullVersion = "${ext.mainVersion}-C${ext.gitCommitId()}"
-    dockerRegistry = systemEnv.getOrDefault("DOCKER_REGISTRY", "docker.io")
+    dockerRegistry = systemEnv.getOrDefault("DOCKER_REGISTRY", "insecure.docker.registry.local:80/docker.io")
     chartMuseum = systemEnv.getOrDefault("CHART_MUSEUM", "http://insecure.chart.museum.local")
     namespace = systemEnv.getOrDefault("NAMESPACE", "nvwa")
     systemEnvMap = systemEnv
+    renderText = { File templateFile, Map<String, String> dataMap ->
+        return doRenderText(templateFile, dataMap)
+    }
+    renderFile = { File templateFile, Map<String, String> dataMap, File targetFile ->
+        doRenderFile(templateFile, dataMap, targetFile)
+    }
+    helmBinary = systemEnv.getOrDefault("HELM_BINARY", "helm")
+}
+
+private void doRenderFile(File templateFile, Map<String, String> dataMap, File targetFile) {
+    println("templateFile(${templateFile.getAbsolutePath()}) -> targetFile(${targetFile.getAbsolutePath()})")
+    project.file(targetFile).parentFile.mkdirs()
+    project.file(targetFile).text = doRenderText(templateFile, dataMap)
+}
+
+private String doRenderText(File templateFile, Map<String, String> dataMap) {
+    println("templateFile(${templateFile.getAbsolutePath()})")
+    return new SimpleTemplateEngine()
+            .createTemplate(templateFile.text)
+            .make(dataMap)
 }

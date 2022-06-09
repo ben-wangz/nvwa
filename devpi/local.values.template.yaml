@@ -1,0 +1,27 @@
+image:
+  repository: ${imageRepository}
+  pullPolicy: Always
+  tag: "${imageTag}"
+imagePullSecrets: [ ]
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /\$1
+    nginx.ingress.kubernetes.io/proxy-body-size: 1g
+    nginx.org/client-max-body-size: 1g
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  hosts:
+    - host: devpi-server.local
+      paths:
+        - path: /?(.*)
+          pathType: ImplementationSpecific
+auth:
+  root:
+    password: "YeqwHPNz9VUWB2bn"
+data:
+  storageClassName: "standard"
+  size: 8Gi
+  dir: /app/devpi/server

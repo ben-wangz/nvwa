@@ -6,8 +6,7 @@
           && export DELETE_CHART_IF_EXISTS=true \
           && ./gradlew :devpi:installSoftware \
           && ./gradlew :devpi:installTool \
-          && ./gradlew :devpi:initializeMirrorJob \
-          && ./gradlew :devpi:testPipInstallJob
+          && ./gradlew :devpi:initializeMirrorJob
       ```
 2. test
     * set hosts

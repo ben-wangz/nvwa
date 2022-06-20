@@ -20,6 +20,8 @@ spec:
           image: ${imageRepository}:${imageTag}
           imagePullPolicy: IfNotPresent
           env:
+            - name: DEVPI_SERVER_SCHEMA
+              value: "https"
             - name: DEVPI_SERVER_HOST
               value: "devpi-server.local"
             - name: DEVPI_SERVER_PORT

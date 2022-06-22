@@ -83,6 +83,7 @@ task releaseClientImage() {
 task releaseImage() {
     doLast {
         File resultMessageFile = extractResultMessageFile(softwareName)
+        resultMessageFile.parentFile.mkdirs()
         resultMessageFile.text = new JsonBuilder([
                 server: [
                         registry  : dockerRegistry,

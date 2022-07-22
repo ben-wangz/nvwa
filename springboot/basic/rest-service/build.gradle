@@ -1,0 +1,39 @@
+buildscript {
+    repositories {
+        for (String mavenRepositoryUrl in project.rootProject.ext.mavenRepositoryUrlList) {
+            maven { url(mavenRepositoryUrl) }
+        }
+    }
+}
+
+plugins {
+    id "org.springframework.boot" version "2.6.3"
+    id "io.spring.dependency-management" version "1.0.11.RELEASE"
+    id "java"
+}
+
+sourceCompatibility = "11"
+group = "tech.geekcity.nvwa.springboot.basic.rest.service"
+version = project.rootProject.ext.fullVersion
+
+repositories {
+    for (String mavenRepositoryUrl in project.rootProject.ext.mavenRepositoryUrlList) {
+        maven { url(mavenRepositoryUrl) }
+    }
+}
+
+String lombokDependency = "org.projectlombok:lombok:1.18.22"
+dependencies {
+    compileOnly(lombokDependency)
+    annotationProcessor(lombokDependency)
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("com.google.guava:guava:31.1-jre")
+
+    testCompileOnly(lombokDependency)
+    testAnnotationProcessor(lombokDependency)
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+}
+
+test {
+    useJUnitPlatform()
+}
